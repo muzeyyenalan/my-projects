@@ -9,9 +9,7 @@ Description: |
   connections on port 80 and ssh port 22 from 
   anywhere. Kittens Carousel Static Website 
   is downloaded from my Public Github repository,
-  then deployed on Apache Web Server
-
-  
+  then deployed on Apache Web Server.
   
 Resources:
   WebServerSecurityGroup:
@@ -27,28 +25,25 @@ Resources:
           FromPort: 22
           ToPort: 22
           CidrIp: 0.0.0.0/0
+
   WebServerHost:
-     Type: 'AWS::EC2::Instance'
-     Properties:
-     
-       ImageId: ami-0a8b4cd432b1c3063
-       InstanceType: t2.micro
-       Ipv6AddressCount: Number
-       KeyName: firstkey
-       SecurityGroupIds:
-         - ! Ref WebServerSecurityGroup
-       SubnetId: "String"
-       Tags:
-         - Key: Name
-           Value: !Sub Web Server of ${AWS::StackName} Stack 
-       Tenancy: "String"
-       UserData:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0a8b4cd432b1c3063 
+      InstanceType: t2.micro
+      KeyName: firstkey
+      SecurityGroupIds:
+        - !Ref WebServerSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub Web Server of ${AWS::StackName} Stack
+      UserData: 
         Fn::Base64:
           !Sub |
             #! /bin/bash
             yum update -y
             yum install httpd -y
-            FOLDER="https://raw.githubusercontent.com/muzeyyenalan/my-projects/main/aws%201/projects/Project-101-kittens-carousel-static-website-ec2/static-web"
+            FOLDER="https://raw.githubusercontent.com/muzeyyenalan/my-projects/main/aws1/projects/Project-101-kittens-carousel-static-website-ec2/static-web"
             cd /var/www/html
             wget $FOLDER/index.html
             wget $FOLDER/cat0.jpg
@@ -58,7 +53,6 @@ Resources:
             systemctl start httpd
             systemctl enable httpd
 
-  
 Outputs:
   WebsiteURL:
     Value: !Sub
