@@ -1,0 +1,152 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: |
+  This Template created from a template file
+Parameters:
+  myKp:
+    Description: Select Your Key
+    Type: AWS::EC2::KeyPair::KeyName
+  
+  paramIT:
+    Description: Select InstanceType
+    Type: String
+    Default: t2.micro
+    AllowedWalues:
+    "AllowedValues" : [ "t1.micro", "t2.nano", "t2.micro", "t2.small", "t2.medium", "t2.large", "m1.small", "m1.medium", "m1.large", "m1.xlarge", "m2.xlarge", "m2.2xlarge", "m2.4xlarge", "m3.medium", "m3.large", "m3.xlarge", "m3.2xlarge", "m4.large", "m4.xlarge", "m4.2xlarge", "m4.4xlarge", "m4.10xlarge", "c1.medium", "c1.xlarge", "c3.large", "c3.xlarge", "c3.2xlarge", "c3.4xlarge", "c3.8xlarge", "c4.large", "c4.xlarge", "c4.2xlarge", "c4.4xlarge", "c4.8xlarge", "g2.2xlarge", "g2.8xlarge", "r3.large", "r3.xlarge", "r3.2xlarge", "r3.4xlarge", "r3.8xlarge", "i2.xlarge", "i2.2xlarge", "i2.4xlarge", "i2.8xlarge", "d2.xlarge", "d2.2xlarge", "d2.4xlarge", "d2.8xlarge", "hi1.4xlarge", "hs1.8xlarge", "cr1.8xlarge", "cc2.8xlarge", "cg1.4xlarge"]
+  
+  mySubnet:
+    Description: Select at least 2subnets
+    Type: List<AWS::EC2::Subnet::Id>
+  myVPC:
+    Description: Select your VPC
+    Type: AWS::EC2::VPC::Id
+
+  
+Mappings:
+  RegionImageMap:
+    us-east-1:
+      AMI: ami-0dc2d3e4c0f9ebd18
+    us-east-2:
+      AMI: ami-0233c2d874b811deb
+    us-west-1:
+      AMI: ami-0ed05376b59b90e46
+    us-west-2:
+      AMI: ami-0dc8f589abe99f538
+    eu-west-1:
+      AMI: ami-058b1b7fe545997ae
+  
+Conditions:
+  
+Resources:
+  myALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      SecurityGroups:
+        - !GetAtt mySG.GroupId
+      Subnets: !Ref mySubnets
+      Tags: aplication
+
+  myASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AvailabilityZones: !GetAZs 
+      DesiredCapacity: "2"
+      HealthCheckGracePeriod: 90
+      HealthCheckType: ELB
+      LaunchTemplate:
+        LaunchTemplateId: !Ref myLT
+        Version: "1"
+      MaxSize: "3" # Required
+      MinSize: "1" # Required
+      TargetGroupARNs:
+        - !Ref myTG
+
+  myListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions: # Required
+        - Type: forward
+          TargetGroupArn: !Ref myTG
+      LoadBalancerArn: !Ref myALB # Required
+      Port: 80
+      Protocol: HTTP
+
+  myCPUPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref myASG # Required
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+       PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 60.0
+
+  # https://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-ec2-launchtemplate.html
+   myLT:
+     Type: AWS::EC2::LaunchTemplate
+     Properties:
+         ImageId: !FindInMap
+         - RegionImageMap
+         - !Ref AWS::Region
+         - AMI
+
+         InstanceType: !Ref paramIT 
+         KeyName: !Ref myKp
+         SecurityGroupIds:
+           - !GetAtt mySG.GroupId
+         UserData: !Base64 |
+            #!/bin/bash
+            
+            yum update -y
+            yum install -y httpd
+            TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"` \
+            && PRIVATE_IP=`curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/local-ipv4`
+            TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"` \
+            && PUBLIC_IP=`curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4` 
+            DATE_TIME=`date`
+            chmod -R 777 /var/www/html
+            echo "<html>
+            <head>
+                <title> Congratulations! You have created an instance from Launch Template</title>
+            </head>
+            <body>
+                <h1>This web server is launched from launch template by Muzeyyen</h1>
+                <p>This instance is created at <b>$DATE_TIME</b></p>
+                <p>Private IP address of this instance is <b>$PRIVATE_IP</b></p>
+                <p>Public IP address of this instance is <b>$PUBLIC_IP</b></p>
+            </body>
+            </html>" > /var/www/html/index.html
+            systemctl start httpd
+            systemctl enable httpd
+
+
+   myTG:
+     Type: AWS::ElasticLoadBalancingV2::TargetGroup
+     Properties:
+       HealthCheckIntervalSeconds: 10
+       HealthCheckTimeoutSeconds: 5
+       HealthyThresholdCount: 5
+       Port: 80
+       Protocol: HTTP
+       UnhealthyThresholdCount: 3
+       VpcId: myVPC #add later
+
+   mySG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enables SSH and HTTP # Required
+      SecurityGroupIngress:
+       - IpProtocol: tcp
+       - FromPort: 22 
+       - ToPort: 22
+       - CidrIp: 0.0.0.0
+      VpcId: myVPC #add later
+
+  
+Outputs:
+  AppUrl:
+    Description: URL of ALB
+    Value: !Join
+      - ''
+      - - 'https://'
+        - !GetAtt myALB.DNSName
+   
