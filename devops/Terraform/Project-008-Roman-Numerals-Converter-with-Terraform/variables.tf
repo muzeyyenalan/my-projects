@@ -3,7 +3,7 @@ variable "vpc_id" {
 }
 
 variable "key_name" {
-  default = "firstkey"
+  default = "??"
 }
 
 variable "ec2_type" {
